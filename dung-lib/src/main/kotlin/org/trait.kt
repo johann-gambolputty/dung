@@ -13,5 +13,6 @@ data class TraitKeyData<T>(override val name: String, val createDefaultFn: ()->T
     override fun createDefault() = createDefaultFn()
 }
 
-//  Default traits
-val tickableTrait = TraitKeyData<EntityData.(WorldFrame)->Array<WorldFrameEntityCommand>>("tickable", { { frame -> arrayOf(WorldFrameEntityCommandCopy(this)) } })
+interface TickableTrait {
+    fun tick(entity: EntityData, lastFrame: WorldFrame, frame: WorldFrameBuilder): EntityData?
+}

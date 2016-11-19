@@ -6,6 +6,7 @@ data class EntityData(val id: Int, val traits: Array<KeyedTrait>) {
     private val traitMap = traits.associate { it.key.to(it.trait) }
     fun <T> addMadeTrait(key: TraitKeyT<T>, makeTrait: (EntityData)->T) = addTrait(key, makeTrait(this))
     fun <T> addTrait(key: TraitKeyT<T>, trait: T) = copy(traits = traits + KeyedTrait(key, trait as Any))
+    fun <T> addTrait(key: TraitKeyT<T>) = addTrait(key, key.createDefault())
     fun <T> addNewTrait(key: TraitKeyT<T>, process: T.()->Unit) = addTrait(key, key.createDefault().apply{ process() })
     fun <T> processNewOrExistingTrait(key: TraitKeyT<T>, process: T.()->Unit): EntityData {
         val trait = traitMap[key]
