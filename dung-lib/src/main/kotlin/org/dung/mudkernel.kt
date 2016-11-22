@@ -188,7 +188,12 @@ val locationLinkTrait = TraitType({ arrayOf<LocationLink>() })
 fun EntityBuilder.addLocationLink(link: LocationLink) = set(locationLinkTrait, (get(locationLinkTrait)?:arrayOf()) + link)
 
 fun north(id: Int) = LocationLink(id, "north", arrayOf("n", "north"))
+fun east(id: Int) = LocationLink(id, "east", arrayOf("e", "east"))
 fun south(id: Int) = LocationLink(id, "south", arrayOf("s", "south"))
+fun west(id: Int) = LocationLink(id, "west", arrayOf("w", "west"))
+fun down(id: Int) = LocationLink(id, "down", arrayOf("d", "down"))
+fun up(id: Int) = LocationLink(id, "up", arrayOf("u", "up"))
+
 
 //  TODO Entities in locations
 //  TODO Different descriptions based on different conditions (embedded rule based descriptions)
@@ -198,36 +203,35 @@ interface Mud {
 }
 
 open class MudCore(private val world: MudWorld) : Mud {
-    val locationMap = mutableMapOf<Int, EntityBuilder.() -> EntityBuilder>()
 
-    override fun createSceneGraph() = SceneGraph(locationMap.entries.map { LocationBuilder(it.key).(it.value)().build() }.toTypedArray())
-    override fun createCommandsForInitialState(): Array<(WorldFrame, WorldFrameBuilder)->Unit> = arrayOf()
+    override fun createCommandsForInitialState(): Array<(WorldFrame, WorldFrameBuilder)->Unit> = entityMap.values.map { { frame: WorldFrame, frameBuilder: WorldFrameBuilder -> frameBuilder.addEntity(it.build()) } }.toTypedArray()
 
-    fun setupLocation(id: Int, name: String, description: String, builder: LocationBuilder.() -> LocationBuilder = { this }): Int {
-        locationMap[id] = { setName(name).setDescription(description).builder() }
-        return id
+    private val entityMap = mutableMapOf<Int, EntityBuilder>()
+
+    protected fun createEntity(name: String, description: String): Int {
+        val entity = EntityImpl(world.nextEntityId()).modify()
+            .set(nameTrait, name)
+            .set(descriptionTrait, description)
+        entityMap[entity.id] = entity
+        return entity.id
     }
 
-    fun createLocation(name: String, description: String, builder: LocationBuilder.() -> LocationBuilder = { this }) = setupLocation(locationId++, name, description, builder)
+    protected fun updateEntity(id: Int, builder: EntityBuilder.()->EntityBuilder) {
+        val existingBuilder = entityMap[id]?:throw IllegalArgumentException("Entity with id $id does not exist")
+        entityMap[id] = existingBuilder.builder()
+    }
 
     fun linkLocations(a: Int, b: Int, aToB: (Int) -> LocationLink, bToA: (Int) -> LocationLink) {
-        decorateLocation(a, { addLocationLink(b, aToB) })
-        decorateLocation(b, { linkToLocation(a, bToA) })
+        updateEntity(a, { addLocationLink(aToB(a)) })
+        updateEntity(b, { addLocationLink(bToA(b)) })
     }
 
-    fun decorateLocation(id: Int, builder: EntityBuilder.() -> EntityBuilder) {
-        val existing = locationMap[id]
-        var newBuilder = builder
-        if (existing != null) {
-            newBuilder = { builder().existing() }
-        }
-        locationMap[id] = newBuilder
-    }
 }
 
 fun runMud(makeMud: (MudWorld)->Mud) {
     val world = MudWorld()
     makeMud(world).createCommandsForInitialState().forEach { world.addCommand(it) }
+    world.process()
 
     val cv = MudClientConsoleView(world)
     val view = MudWorldView(cv.playerId, world, cv)

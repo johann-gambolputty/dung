@@ -1,28 +1,26 @@
 package org.dung
 
 fun main(args: Array<String>) {
-    runMud(DesperateMeasures())
+    runMud({ world -> DesperateMeasures(world) })
 }
 
-class DesperateMeasures() : MudCore() {
+class DesperateMeasures(world: MudWorld) : MudCore(world) {
 
-    fun castleGuard(name: String) =
-            EntityImpl()
+    fun castleGuard(id: Int, name: String) =
+            EntityImpl(id).modify()
                     .set(nameTrait, name)
+                    .set(descriptionTrait, "A tall, strong guard from the castle barracks. He's well-trained and well-equipped")
 
-    val location_start = createLocation("Bedroom", """
+    val location_start = createEntity("Bedroom", """
 Your bedroom, night-time. Light shines around the edges of a tiny door, set in the north wall, that you have never noticed before.
-""", {
-        +EntityImpl(0).modify()
-        +EntityImpl(0).modify()
-    })
+""")
 
-    val location_start_tunnel = createLocation("Tunnel", """
+    val location_start_tunnel = createEntity("Tunnel", """
 A long and winding tunnel, stretching from your bedroom to some unknown location
 """)
     init { linkLocations(location_start, location_start_tunnel, ::north, ::south) }
 
-    val location_castle_entrance = createLocation("Castle Entrance", """
+    val location_castle_entrance = createEntity("Castle Entrance", """
 A dismal castle, swept by rain from low, tattered clouds. Its walls are made from thick dark stone. Firelight flickers
 fitfully through arrow slits.
 """)
