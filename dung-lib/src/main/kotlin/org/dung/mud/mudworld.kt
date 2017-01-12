@@ -9,6 +9,12 @@ class MudWorldFrame(entities: Array<Entity>) : WorldFrame(entities) {
     fun getEntitiesInLocation(id: Int) = getAllEntities().filter { entity -> entity.get(locationTrait)==id }
 }
 
+fun MudWorldFrame.entityWithNameAtLocation(name: String, locationId: Int): Entity? {
+    val ucName = name.toUpperCase()
+    return getEntitiesInLocation(locationId).first { ucName == it.get(nameTrait)?.toUpperCase() }
+}
+
+
 //  TODO use type aliases when available
 interface MudWorldCommand : WorldCommand<MudWorldFrame>
 
@@ -19,21 +25,19 @@ fun mudCommand(f: (currentFrame: MudWorldFrame, nextFrame: WorldFrameBuilder<Mud
 
 fun mudEntityCommand(f: (entity: Entity, currentFrame: MudWorldFrame, nextFrame: WorldFrameBuilder<MudWorldFrame>) -> Unit) = entityCommand(f)
 
-fun defaultEntity(entityGen: EntityGenerator, name: String, description: String, buildMore: EntityBuilder.()->EntityBuilder = { this }) =
-        entityGen.newEntity()
-                .set(nameTrait, name)
-                .set(descriptionTrait, description)
-                .buildMore()
+fun EntityBuilder.defaultEntity(name: String, description: String) =
+        set(nameTrait, name)
+        .set(descriptionTrait, description)
 
-fun defaultCreature(entityGen: EntityGenerator, name: String, description: String, startingHealth: Int, startingInventory: Array<Entity> = arrayOf(), buildMore: EntityBuilder.()->EntityBuilder = { this }): EntityBuilder {
-    var eb = defaultEntity(entityGen, name, description)
+fun EntityBuilder.defaultCreature(name: String, description: String, startingHealth: Int, startingInventory: Array<Entity> = arrayOf()): EntityBuilder {
+    var eb = defaultEntity(name, description)
             .setDefault(damageMonitorTrait)
             .set(healthTrait, startingHealth)
             .set(inventoryTrait, Inventory(startingInventory))
     if (!startingInventory.isEmpty()) {
         eb = eb.set(wieldTrait, startingInventory[0].id)
     }
-    return eb.buildMore()
+    return eb
 }
 
 open class MudWorldInitializer(val world: UpdatingMudWorld) : WorldInitializer<MudWorldFrame> {
@@ -42,11 +46,22 @@ open class MudWorldInitializer(val world: UpdatingMudWorld) : WorldInitializer<M
 
     private val entityMap = mutableMapOf<Int, EntityBuilder>()
 
-    protected fun createEntity(name: String, description: String, buildMore: EntityBuilder.()-> EntityBuilder = { this }): Int {
-        val entity = EntityBuilderImpl(world.nextEntityId(), mutableMapOf())
-                .set(nameTrait, name)
-                .set(descriptionTrait, description)
-                .buildMore()
+    protected fun createEntity(setup: EntityBuilder.()-> EntityBuilder): Int {
+        val entity = EntityBuilderImpl(world.nextEntityId(), mutableMapOf()).setup()
+        entityMap[entity.id] = entity
+        return entity.id
+    }
+
+    protected fun createEntity(name: String, description: String, setup: EntityBuilder.()-> EntityBuilder = { this }): Int {
+        val entity = EntityBuilderImpl(world.nextEntityId(), mutableMapOf()).defaultEntity(name, description).setup()
+        entityMap[entity.id] = entity
+        return entity.id
+    }
+
+    protected fun createActor(name: String, description: String, startingHealth: Int, startingInventory: Array<Entity> = arrayOf(), setup: EntityBuilder.()-> EntityBuilder = { this }): Int {
+        val entity = EntityBuilderImpl(world.nextEntityId())
+                .defaultCreature(name, description, startingHealth, startingInventory)
+                .setup()
         entityMap[entity.id] = entity
         return entity.id
     }
@@ -56,12 +71,7 @@ open class MudWorldInitializer(val world: UpdatingMudWorld) : WorldInitializer<M
         entityMap[id] = existingBuilder.builder()
     }
 
-    fun linkLocations(a: Int, b: Int, aToB: (Int) -> LocationLink, bToA: (Int) -> LocationLink) {
-        updateEntity(a, { addLocationLink(aToB(b)) })
-        updateEntity(b, { addLocationLink(bToA(a)) })
-    }
 }
-
 
 fun runMud(makeWorldInitializer: (UpdatingMudWorld)-> WorldInitializer<MudWorldFrame>) {
     val world = UpdatingMudWorld()

@@ -15,10 +15,12 @@ open class WorldFrame(private val entities: Array<Entity>) {
 }
 
 
-class WorldFrameBuilder<TFrame : WorldFrame>(baseFrame: TFrame, private val createFrame: (Array<Entity>)->TFrame) {
+class WorldFrameBuilder<TFrame : WorldFrame>(baseFrame: TFrame, private val entityGen: EntityGenerator, private val createFrame: (Array<Entity>)->TFrame) {
     val entitiesById = HashMap(baseFrame.getAllEntities().map { entity -> entity.modify() }.associate { it.id to it })
-    fun updateEntity(id: Int, updateFnc: EntityBuilder.()->EntityBuilder) {
+    fun newEntity() = entityGen.newEntity()
+    fun updateEntity(id: Int, updateFnc: EntityBuilder.()->EntityBuilder): WorldFrameBuilder<TFrame> {
         entitiesById[id]?.run { entitiesById[id] = updateFnc() }
+        return this
     }
     fun addEntity(entity: Entity) {
         val eb = entity.modify()
@@ -28,15 +30,14 @@ class WorldFrameBuilder<TFrame : WorldFrame>(baseFrame: TFrame, private val crea
         entitiesById.remove(entityId)
     }
 
-    //fun build(): TFrame = WorldFrame(entitiesById.values.map { it.build() }.toTypedArray())
-    fun build(): TFrame = createFrame(entitiesById.values.map { it.build() }.toTypedArray())
+    fun build(): TFrame = createFrame(entitiesById.values.filter { !it.get(removeFromWorldTrait, false) }.map { it.build() }.toTypedArray())
 }
 
 
 interface TickableTrait<TFrame : WorldFrame> {
     //  TODO Should this be able to directly update an EntityBuilder
     //  NOTE Probably not because there is no equivalent capacity to update another entity
-    fun update(entity: Entity, updateTimestamp: LocalDateTime): List<WorldCommand<TFrame>>
+    fun update(frame: TFrame, entity: Entity, updateTimestamp: LocalDateTime): List<WorldCommand<TFrame>>
 }
 
 interface WorldCommand<TFrame : WorldFrame> {
@@ -52,6 +53,8 @@ fun <TFrame : WorldFrame> command(f: (currentFrame: TFrame, nextFrame: WorldFram
         override fun run(frame: TFrame, nextFrame: WorldFrameBuilder<TFrame>)= f(frame, nextFrame)
     }
 }
+
+fun <TFrame : WorldFrame> updateEntityCommand(entityId: Int, )
 
 fun <TFrame : WorldFrame> entityCommand(f: (Entity, TFrame, WorldFrameBuilder<TFrame>)->Unit): WorldEntityCommand<TFrame> {
     return object : WorldEntityCommand<TFrame> {
@@ -85,9 +88,9 @@ open class UpdatingWorld<TFrame : WorldFrame>(private val createFrame: (Array<En
         commandQueue.drainTo(commands)
 
         val frameTimestamp = LocalDateTime.now()
-        commands.addAll(currentFrame.getAllEntities().flatMap { e -> e.traits.values.filterIsInstance<TickableTrait<TFrame>>().flatMap { it.update(e, frameTimestamp) } })
+        commands.addAll(currentFrame.getAllEntities().flatMap { e -> e.traits.values.filterIsInstance<TickableTrait<TFrame>>().flatMap { it.update(currentFrame, e, frameTimestamp) } })
 
-        val currentFrameBuilder = WorldFrameBuilder<TFrame>(currentFrame, createFrame)
+        val currentFrameBuilder = WorldFrameBuilder<TFrame>(currentFrame, this, createFrame)
         commands.forEach { command -> command.run(currentFrame, currentFrameBuilder) }
 
         currentFrame = currentFrameBuilder.build()

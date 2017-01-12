@@ -1,0 +1,45 @@
+[
+  {
+    "thing": "entityTemplate",
+    "name": "template-actor",
+    "traits": [
+      { "trait": "description", "value": "${entity.flavourText}"},
+      { "trait": "health", "value": 10 },
+      { "trait": "gender", "value": "Object" },
+      { "trait": "damageMonitor" },
+      { "trait": "affordanceAttack" }
+    ]
+  },
+  {
+    "thing": "entityTemplate",
+    "name": "template-castleguard",
+    "inherits": [ "template-actor" ],
+    "traits": [
+      { "dyntrait": "flavourText", "value": "A surly castle guard named ${entity.name}"},
+      { "trait": "chatty", "value": [
+        "${entity.name} picks ${entity.gender.pronoun} nose and inspects the results"
+      ]}
+    ]
+  },
+  {
+    "thing": "entityTemplate",
+    "name": "template-castleguard-bob",
+    "inherits": "template-castleguard",
+    "traits": [
+      { "trait": "name", "value": "Bob" },
+      { "trait": "gender", "value": "Male" }
+    ]
+  },
+  {
+    "thing": "entityTemplate",
+    "name": "template-location"
+  },
+  {
+    "name": "location-start",
+    "inherits": [ "template-location" ],
+    "traits": [
+      { "trait": "description"}
+    ],
+    "entities": [ "template-castleguard-bob" ]
+  }
+]
