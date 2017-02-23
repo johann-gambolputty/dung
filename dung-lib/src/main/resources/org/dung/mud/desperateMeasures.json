@@ -3,11 +3,12 @@
     "thing": "entityTemplate",
     "name": "template-actor",
     "traits": [
-      { "trait": "description", "value": "${entity.flavourText}"},
+      { "trait": "description", "value": "#{entity.flavourText}"},
       { "trait": "health", "value": 10 },
       { "trait": "gender", "value": "Object" },
       { "trait": "damageMonitor" },
-      { "trait": "affordanceAttack" }
+      { "trait": "affordanceAttack" },
+      { "trait": "affordanceInspect" }
     ]
   },
   {
@@ -15,9 +16,15 @@
     "name": "template-castleguard",
     "inherits": [ "template-actor" ],
     "traits": [
-      { "dyntrait": "flavourText", "value": "A surly castle guard named ${entity.name}"},
-      { "trait": "chatty", "value": [
-        "${entity.name} picks ${entity.gender.pronoun} nose and inspects the results"
+      { "dyntrait": "flavourText", "value": "A surly castle guard named #{entity.name}"},
+      { "trait": "randomFlavourNoise", "value": [
+        "#{entity.name} picks #{entity.gender.pronoun} nose and inspects the results",
+        "#{entity.name} sighs in boredom",
+        "#{entity.name} scans the surroundings for signs of trouble",
+        "#{entity.name} ponders the meaning of life",
+        "#{entity.name} stomach rumbles",
+        "#{entity.name} tightens #{entity.gender.pronoun} armour straps",
+        "#{entity.name} loosens #{entity.gender.pronoun} sword in its scabbard"
       ]}
     ]
   },
@@ -25,21 +32,107 @@
     "thing": "entityTemplate",
     "name": "template-castleguard-bob",
     "inherits": "template-castleguard",
-    "traits": [
-      { "trait": "name", "value": "Bob" },
-      { "trait": "gender", "value": "Male" }
-    ]
+    "trait-name": { "value": "Bob" },
+    "trait-gender": { "value": "Male" }
   },
   {
     "thing": "entityTemplate",
     "name": "template-location"
   },
   {
-    "name": "location-start",
+    "name": "location-start-tunnel",
     "inherits": [ "template-location" ],
     "traits": [
-      { "trait": "description"}
+      { "trait": "description", "value": "Starting location 2" }
+    ]
+  },
+  {
+    "thing": "entityTemplate",
+    "name": "template-exit-north",
+    "trait-description": { "value": "Exit north" },
+    "trait-affordanceGoNorth": { "destination": "location-start-tunnel" }
+  },
+  {
+    "thing": "entityTemplate",
+    "name": "template-exit-south",
+    "trait-description": { "value": "Exit south" },
+    "trait-affordanceGoSouth": { "destination": "location-start-tunnel" }
+  },
+  {
+    "thing": "entityTemplate",
+    "name": "weapon"
+  },
+  {
+    "thing": "entityTemplate",
+    "name": "template-door",
+    "traits": [
+      { "trait": "affordanceOpenable", "command": { "type": "commandCreateExit", "destination": "#{entity.doorDestination}" }},
+      { "trait": "affordanceCloseable", "command": { "type": "commandDestroyExit" }}
+    ]
+  },
+  {
+    "thing": "entityTemplate",
+    "name": "template-door-locked",
+    "inherits": "template-door",
+    "trait-affordanceLock": { "targetAffordance": "affordanceOpenable", "unlockedByTrait": { "trait": "name", "value": "#{entity.doorKey}" } }
+  },
+  {
+    "name": "location-start",
+    "inherits": [ "template-location" ],
+    "trait-description": { "value": "You are in your bedroom. It is night-time. A low moon sends a shaft of moonlight stretching through a gap in the curtain. By its light, a strange glittering outline of a door has appeared, where there was once only bare wall."
+    },
+    "traits": [
+      { "trait": "startingLocation" }
     ],
-    "entities": [ "template-castleguard-bob" ]
-  }
+    "entities": [
+      { "name": "castleguard-bob", "inherits": "template-castleguard", "trait-name": { "value": "Bob"}, "trait-gender": { "value": "Male" } },
+      { "name": "location-start-exit", "inherits": "template-door-locked", "trait-name": "ShinyDoor", "dyntrait-doorKey": { "value": "..." }, "dyntrait-doorDestination": { "value": "location-start-tunnel" }}
+    ]
+  },
+  {
+    "name": "location-start-tunnel",
+    "inherits": "template-location",
+    "trait-description": { "value": "A narrow tunnel. The walls are earth, propped up by rotting wooden posts. One end of the tunnel shines in silvery light - the exit to your bedroom. The way ahead lies shrouded in darkness" },
+    "entities": [
+      { "name": "location-start-tunnel-southExit", "inherits": "template-exit-south", "dyntrait-destination": { "value": "location-start" }},
+      { "name": "location-start-tunnel-northExit", "inherits": "template-exit-north", "dyntrait-destination": { "value": "location-start-tunnel-exit" }}
+    ]
+  },
+  {
+    "name": "location-start-tunnel-exit",
+    "inherits": "template-location",
+    "trait-description": { "value": "The tunnel continues northwards. Ahead is a glimmer of natural light that illuminates the rough walls. Somewhere to the south lies your bedroom, now invisible in darkness." },
+    "entities": [
+      {"name": "location-start-tunnel-exit-southExit", "inherits": "template-exit-south", "dyntrait-destination": { "value": "location-start-tunnel" } },
+      {"name": "location-start-tunnel-exit-northExit", "inherits": "template-exit-north", "dyntrait-destination": { "value": "location-shatterland-entrance" } }
+    ]
+  },
+  {
+    "name": "location-shatterland-entrance",
+    "inherits": "template-location",
+    "trait-description": { "value": "Pale milky sunlight washes across a landscape of shattered rock and shards of volcanic glass. Mountains emerge randomly from the dismal plain, like a scattering of giant's teeth" },
+    "entities": [
+      { "name": "glass-shard", "inherits": "weapon", "trait-name": "Glass Shard", "trait-description": "A crude sharp-edged shard of volcanic glass. It's a weapon, of sorts" }
+    ]
+  }, {
+    "name": "location-shatterland-castleblack-approach",
+    "inherits": "template-location",
+    "trait-description": "Directionless light washes out shadows. The plain is a uniform dull gray. Obsidian and rock crunch underfoot. In the far distance, a pillar of smoke rises from a black peak.",
+    "entities": [
+      { "name": "snake", "inherits": "template-actor", "trait-name": "Crippled obsidian shard snake", "trait-description": "The mature obsidian snake is a formidable predator of the volcanic plain, lying near invisible in shallow cracks. However, this meagre specimen would struggle to take down a mouse. Half its body is encased in thick crystal, making its movements clumsy." }
+    ]
+  }, {
+  "name": "location-shatterland-castleblack-environs",
+  "inherits": "template-location",
+  "trait-description": "Ahead, in the permanent shadow of a cleft between two jagged peaks, squats a bleak castle. Its walls are made from heaps of jet black pumice and flint bound by rivulets of melt-rock.",
+  "entities": [
+  ]
+}, {
+  "name": "location-shatterland-castleblack-gate",
+  "inherits": "template-location",
+  "trait-description": "The walls of Castle Black loom above you, looking more like the steep slopes of a volcanic cinder cone than a castle. Tunneled into the rock is a huge black iron-bound gate",
+  "entities": [
+    { "name": "castleguard", "inherits": "template-castleguard", "trait-name": "Derek"}
+  ]
+}
 ]

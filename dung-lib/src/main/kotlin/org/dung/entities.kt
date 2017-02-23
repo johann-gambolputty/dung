@@ -13,6 +13,7 @@ interface Entity : TraitBased {
 
 interface EntityBuilder : TraitBased {
     val id: Int
+    fun putAll(traitValues: Map<TraitType<*>, Any>): EntityBuilder
     fun <T> set(t: TraitType<T>, value: T): EntityBuilder
     fun <T> remove(t: TraitType<T>): EntityBuilder
     fun build(): Entity
@@ -30,6 +31,11 @@ fun <T> EntityBuilder.getOrCreate(t: TraitType<T>, create: ()->T = { t.createDef
 }
 
 class EntityBuilderImpl(override val id: Int, override val traits: MutableMap<TraitType<*>, Any> = mutableMapOf()) : EntityBuilder {
+    override fun putAll(traitValues: Map<TraitType<*>, Any>): EntityBuilder {
+        traits.putAll(traitValues)
+        return this
+    }
+
     override fun <T> get(t: TraitType<T>): T? {
         val traitValue = traits[t]
         return if (traitValue == null) null else traitValue as T
@@ -50,6 +56,8 @@ class EntityBuilderImpl(override val id: Int, override val traits: MutableMap<Tr
 }
 
 class EntityImpl(override val id: Int, override val traits: Map<TraitType<*>, Any> = mapOf()) : Entity, EntityBuilder {
+
+    override fun putAll(traitValues: Map<TraitType<*>, Any>): EntityBuilder = EntityBuilderImpl(id, HashMap(traits)).putAll(traitValues)
 
     override fun <T> remove(t: TraitType<T>): EntityBuilder = EntityBuilderImpl(id, HashMap(traits)).remove(t)
 

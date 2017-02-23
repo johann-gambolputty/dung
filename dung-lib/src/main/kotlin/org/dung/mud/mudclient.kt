@@ -12,7 +12,7 @@ class ClientSignalRenderer(private val clientView: MudClientView) : SignalProces
 
     override fun process(frame: WorldFrame, entity: Entity, signal: Signal): Signal {
         when (signal) {
-            is ChatSignal -> clientView.show("${signal.chattyEntity.get(nameTrait)}: ${signal.message}")
+            is ChatSignal -> clientView.show("${signal.chattyEntity.name()}: ${signal.message}")
             is WieldSignal -> clientView.show("${frame.getEntityById(signal.itemId)?.get(nameTrait)}")
         }
         return signal
@@ -22,14 +22,17 @@ class ClientSignalRenderer(private val clientView: MudClientView) : SignalProces
 val showSignalsOnClientTrait = mudTraitTypes.newTraitWithNoDefault<SignalProcessor>("showSignalsOnClient", { node -> null })
 
 class MudClientConsoleView(private val world: UpdatingMudWorld) : MudClientView {
-    override val playerId: Int = world.nextEntityId()
+    override val playerId: Int = world.newEntityId()
     override fun show(text: String) = println(text)
 
     init {
-
+        val startingLocations = world.currentFrame.entitiesWithTraitValue(startingLocation, true)
+        if (startingLocations.isEmpty()) {
+            throw RuntimeException("Cannot find any starting locations - please add the '${startingLocation.traitName}' trait to a location")
+        }
         val player = EntityBuilderImpl(playerId)
                 .defaultCreature("Dylan", "It's Dylan!", startingHealth = 10)
-                .set(locationTrait, 0)
+                .set(locationTrait, startingLocations.first().id)
                 .setHumanPlayer()
                 .set(showSignalsOnClientTrait, ClientSignalRenderer(this))
                 .build()
@@ -52,9 +55,12 @@ class MudClientConsoleView(private val world: UpdatingMudWorld) : MudClientView 
                         val player = currentFrame.getEntityById(playerId) ?: return@cmd
                         val playerLocationId = player.get(locationTrait) ?: -1
                         val verb = line[0].toUpperCase()
-                        val targetEntity = if (line.size > 1) currentFrame.entityWithNameAtLocation(line[1], playerLocationId)?.apply { show("There is no '${line[1]}' here") } else player
+                        val targetEntity = if (line.size > 1) currentFrame.entityWithNameAtLocation(line[1], playerLocationId) else player
                         if (targetEntity != null) {
-                            targetEntity.traitsOf<AffordanceTrait>().first { it.matches(verb) }?.apply { apply(currentFrame, nextFrame, player, targetEntity) }
+                            targetEntity.traitsOf<AffordanceTrait>().firstOrNull { it.matches(verb) }?.apply { apply(currentFrame, nextFrame, player, targetEntity) }
+                        }
+                        else {
+                            show("There is no '${line[1]}' here")
                         }
                     }))
                         /*
@@ -116,11 +122,13 @@ class MudWorldView(val entityId: Int, world: UpdatingMudWorld, view: MudClientVi
 
                 if (locationInLastFrame != locationInCurrentFrame) {
                     currentFrame.getEntityById(locationInCurrentFrame)?.let { location->
-                        view.show(location.get(descriptionTrait)?:"")
+                        view.show(location.description())
                         val entitiesInLocation = currentFrame.getEntitiesInLocation(locationInCurrentFrame)
                         if (!entitiesInLocation.isEmpty()) {
                             view.show("You can see:")
-                            entitiesInLocation.map { it.get(nameTrait) }.filterNotNull().forEach { view.show(it) }
+                            entitiesInLocation.map { it.get(nameTrait)?.toString(it) }
+                                    .filterNotNull()
+                                    .forEach { view.show(it) }
                         }
                     }
                 }

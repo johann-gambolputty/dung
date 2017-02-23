@@ -22,6 +22,10 @@
 
 	<dependencies>
         <dependency>
+            <groupId></groupId>
+            <artifactId></artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-core</artifactId>
             <version>${jackson.version}</version>
@@ -51,6 +55,11 @@
             <artifactId>kotlin-test</artifactId>
             <version>${kotlin.version}</version>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.jetbrains.kotlin</groupId>
+            <artifactId>kotlin-reflect</artifactId>
+            <version>RELEASE</version>
         </dependency>
     </dependencies>
 

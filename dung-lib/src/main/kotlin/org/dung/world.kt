@@ -12,12 +12,14 @@ open class WorldFrame(private val entities: Array<Entity>) {
     private val entitiesById = entities.associate { it.id to it }
     fun getEntityById(id: Int) = entitiesById[id]
     fun getAllEntities() = entities
+    fun <T> entitiesWithTraitValue(startingLocation: TraitType<T>, value: T) = entities.filter { entity -> entity[startingLocation] == value }
 }
 
 
 class WorldFrameBuilder<TFrame : WorldFrame>(baseFrame: TFrame, private val entityGen: EntityGenerator, private val createFrame: (Array<Entity>)->TFrame) {
     val entitiesById = HashMap(baseFrame.getAllEntities().map { entity -> entity.modify() }.associate { it.id to it })
     fun newEntity() = entityGen.newEntity()
+    fun newEntityId() = entityGen.newEntityId()
     fun updateEntity(id: Int, updateFnc: EntityBuilder.()->EntityBuilder): WorldFrameBuilder<TFrame> {
         entitiesById[id]?.run { entitiesById[id] = updateFnc() }
         return this
@@ -54,9 +56,11 @@ fun <TFrame : WorldFrame> command(f: (currentFrame: TFrame, nextFrame: WorldFram
     }
 }
 
-fun <TFrame : WorldFrame> updateEntityCommand(entityId: Int, )
+fun <TFrame : WorldFrame> updateEntityCommand(entityId: Int, updateFnc: EntityBuilder.()->EntityBuilder): WorldCommand<TFrame> {
+    return command({ frame, nextFrame -> nextFrame.updateEntity(entityId, updateFnc) })
+}
 
-fun <TFrame : WorldFrame> entityCommand(f: (Entity, TFrame, WorldFrameBuilder<TFrame>)->Unit): WorldEntityCommand<TFrame> {
+fun <TFrame : WorldFrame> entityCommand(f: (entity: Entity, currentFrame: TFrame, nextFrame: WorldFrameBuilder<TFrame>)->Unit): WorldEntityCommand<TFrame> {
     return object : WorldEntityCommand<TFrame> {
         override fun run(entity: Entity, frame: TFrame, nextFrame: WorldFrameBuilder<TFrame>)= f(entity, frame, nextFrame)
     }
@@ -64,9 +68,12 @@ fun <TFrame : WorldFrame> entityCommand(f: (Entity, TFrame, WorldFrameBuilder<TF
 
 interface EntityGenerator {
     fun newEntity():EntityBuilder
+    fun newEntityId(): Int
 }
 
 open class UpdatingWorld<TFrame : WorldFrame>(private val createFrame: (Array<Entity>)->TFrame) : EntityGenerator {
+
+
     var lastFrame = createFrame(arrayOf())
     var currentFrame = lastFrame
     val entityIdGen = AtomicInteger()
@@ -75,13 +82,13 @@ open class UpdatingWorld<TFrame : WorldFrame>(private val createFrame: (Array<En
 
     val newFrame: Observable<Pair<TFrame, TFrame>> get() = newFrameSubject
 
-    fun nextEntityId() = entityIdGen.andIncrement
+    override fun newEntityId(): Int = entityIdGen.andIncrement
 
     fun addCommand(cmd: WorldCommand<TFrame>) {
         commandQueue.add(cmd)
     }
 
-    override fun newEntity(): EntityBuilder = EntityBuilderImpl(nextEntityId(), mutableMapOf())
+    override fun newEntity(): EntityBuilder = EntityBuilderImpl(newEntityId(), mutableMapOf())
 
     fun process() {
         val commands = mutableListOf<WorldCommand<TFrame>>()

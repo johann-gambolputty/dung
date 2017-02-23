@@ -52,10 +52,10 @@ data class TraitType<T> (override val traitName: String, val createDefaultFun: (
 
 interface TraitBased {
     val traits: Map<TraitType<*>, Any>
-    fun <T> get(t: TraitType<T>): T?
+    operator fun <T> get(t: TraitType<T>): T?
 }
 inline fun <reified T> TraitBased.traitsOf() = traits.values.filterIsInstance<T>()
 fun <T> TraitBased.get(t: TraitType<T>, defaultValue: T) = get(t)?:defaultValue
-
+fun TraitBased.getByName(t: String): Any? = traits.entries.firstOrNull { entry -> entry.key.traitName == t }?.value
 val commonTraitTypes = TraitTypeMaker()
 val removeFromWorldTrait = commonTraitTypes.newTrait("removeFromWorld", { false }, { node -> node.valueBoolean() })

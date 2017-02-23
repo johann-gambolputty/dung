@@ -11,7 +11,7 @@ class MudWorldFrame(entities: Array<Entity>) : WorldFrame(entities) {
 
 fun MudWorldFrame.entityWithNameAtLocation(name: String, locationId: Int): Entity? {
     val ucName = name.toUpperCase()
-    return getEntitiesInLocation(locationId).first { ucName == it.get(nameTrait)?.toUpperCase() }
+    return getEntitiesInLocation(locationId).firstOrNull { ucName == it.get(nameTrait)?.toString(it)?.toUpperCase() }
 }
 
 
@@ -26,8 +26,8 @@ fun mudCommand(f: (currentFrame: MudWorldFrame, nextFrame: WorldFrameBuilder<Mud
 fun mudEntityCommand(f: (entity: Entity, currentFrame: MudWorldFrame, nextFrame: WorldFrameBuilder<MudWorldFrame>) -> Unit) = entityCommand(f)
 
 fun EntityBuilder.defaultEntity(name: String, description: String) =
-        set(nameTrait, name)
-        .set(descriptionTrait, description)
+        set(nameTrait, EntityFormatString(name))
+        .set(descriptionTrait, EntityFormatString(description))
 
 fun EntityBuilder.defaultCreature(name: String, description: String, startingHealth: Int, startingInventory: Array<Entity> = arrayOf()): EntityBuilder {
     var eb = defaultEntity(name, description)
@@ -47,19 +47,19 @@ open class MudWorldInitializer(val world: UpdatingMudWorld) : WorldInitializer<M
     private val entityMap = mutableMapOf<Int, EntityBuilder>()
 
     protected fun createEntity(setup: EntityBuilder.()-> EntityBuilder): Int {
-        val entity = EntityBuilderImpl(world.nextEntityId(), mutableMapOf()).setup()
+        val entity = EntityBuilderImpl(world.newEntityId(), mutableMapOf()).setup()
         entityMap[entity.id] = entity
         return entity.id
     }
 
     protected fun createEntity(name: String, description: String, setup: EntityBuilder.()-> EntityBuilder = { this }): Int {
-        val entity = EntityBuilderImpl(world.nextEntityId(), mutableMapOf()).defaultEntity(name, description).setup()
+        val entity = EntityBuilderImpl(world.newEntityId(), mutableMapOf()).defaultEntity(name, description).setup()
         entityMap[entity.id] = entity
         return entity.id
     }
 
     protected fun createActor(name: String, description: String, startingHealth: Int, startingInventory: Array<Entity> = arrayOf(), setup: EntityBuilder.()-> EntityBuilder = { this }): Int {
-        val entity = EntityBuilderImpl(world.nextEntityId())
+        val entity = EntityBuilderImpl(world.newEntityId())
                 .defaultCreature(name, description, startingHealth, startingInventory)
                 .setup()
         entityMap[entity.id] = entity
@@ -73,8 +73,7 @@ open class MudWorldInitializer(val world: UpdatingMudWorld) : WorldInitializer<M
 
 }
 
-fun runMud(makeWorldInitializer: (UpdatingMudWorld)-> WorldInitializer<MudWorldFrame>) {
-    val world = UpdatingMudWorld()
+fun runMud(world: UpdatingMudWorld, makeWorldInitializer: (UpdatingMudWorld) -> WorldInitializer<MudWorldFrame>) {
     makeWorldInitializer(world).createCommandsForInitialState().forEach { world.addCommand(it) }
     world.process()
 
