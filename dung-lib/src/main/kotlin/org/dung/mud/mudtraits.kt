@@ -139,6 +139,10 @@ class FlavourNoiseTrait(private val messages: Array<(MudWorldFrame, Entity)->Str
         }))
     }
 }
+//fun flavourNoise(vararg messages: String): FlavourNoiseTrait =
+//        flavourNoise(Duration.ofSeconds(5), Duration.ofSeconds(20), *messages)
+//fun flavourNoise(minDelay: TemporalAmount, maxDelay: TemporalAmount, vararg messages: String): FlavourNoiseTrait =
+//        FlavourNoiseTrait(messages, minDelay, maxDelay)
 val randomFlavourNoiseTrait = mudTraitTypes.newTrait("randomFlavourNoise", { FlavourNoiseTrait(arrayOf())}, { node ->
     val value = node["value"]?:throw RuntimeJsonMappingException("Expected trait to have a value")
     if (value.nodeType != JsonNodeType.ARRAY) {

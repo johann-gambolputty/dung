@@ -1,10 +1,12 @@
 package org.dung
 
+import org.dung.mud.EntityFormatString
 import java.util.*
 
 /**
  * Entity classes
  */
+
 
 interface Entity : TraitBased {
     val id: Int
@@ -18,6 +20,21 @@ interface EntityBuilder : TraitBased {
     fun <T> remove(t: TraitType<T>): EntityBuilder
     fun build(): Entity
     fun build(id: Int): Entity
+
+    operator fun <T> TraitType<T>.compareTo(value: T): Int {
+        this@EntityBuilder.set(this, value)
+        return 0
+    }
+    operator fun TraitType<EntityFormatString>.compareTo(value: String): Int {
+        this@EntityBuilder.set(this, EntityFormatString(value))
+        return 0
+    }
+    operator fun <T> TraitType<T>.unaryPlus(): Unit {
+        this@EntityBuilder.set(this, createDefault())
+    }
+    operator fun EntityBuilder.unaryPlus(): Unit {
+        this@EntityBuilder.putAll(this.traits)
+    }
 }
 fun <T> EntityBuilder.setDefault(t: TraitType<T>) = set(t, t.createDefault())
 fun <T> EntityBuilder.getOrCreate(t: TraitType<T>, create: ()->T = { t.createDefault() }): T {
