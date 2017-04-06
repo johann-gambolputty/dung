@@ -23,7 +23,7 @@ interface JsonEntityResolver {
 }
 
 fun JsonEntityResolver.entityId(node: JsonNode, entityRefNodeName: String): Int = entityId(node[entityRefNodeName])
-fun <TFrame : WorldFrame> createWorldInitializerFromJson(source: URL, traitTypeFromName: (name: String)->TraitType<*>, entityGenerator: EntityGenerator): (UpdatingWorld<TFrame>)-> WorldInitializer<TFrame> {
+fun <TFrame : WorldFrame> createWorldInitializerFromJson(source: URL, traitTypeFromName: (name: String)->TraitTypeT<*>, entityGenerator: EntityGenerator): (UpdatingWorld<TFrame>)-> WorldInitializer<TFrame> {
     val jsonTree = ObjectMapper().readTree(source)
 
     if (!jsonTree.isArray) {
@@ -109,7 +109,7 @@ fun <TFrame : WorldFrame> createWorldInitializerFromJson(source: URL, traitTypeF
                           continue
                      }
                      if (field.key.startsWith("trait-")) {
-                         fun <T> addTrait(t: TraitType<T>) {
+                         fun <T> addTrait(t: TraitTypeT<T>) {
                              val traitValue: T = t.fromJson(field.value, entityResolver) ?: throw RuntimeJsonMappingException("Null returned from trait instance creation for trait ${t.traitName}")
                              entityBuilder.set(t, traitValue)
                          }
@@ -129,10 +129,10 @@ fun <TFrame : WorldFrame> createWorldInitializerFromJson(source: URL, traitTypeF
                          .toList()
                          .filterNotNull()
                          .map {
-                             fun extractTrait(): TraitType<*> {
+                             fun extractTrait(): TraitTypeT<*> {
                                  val dynTraitName = it["dyntrait"]?.textValue()
                                  if (dynTraitName != null) {
-                                     return TraitType<String>(dynTraitName, { throw RuntimeException("Did not expect to call default on dynamic trait")}, { node -> node.valueString() })
+                                     return TraitType0Impl<String>(dynTraitName, { throw RuntimeException("Did not expect to call default on dynamic trait")}, { node, _ -> node.valueString() })
                                  }
                                  val traitName = it["trait"]?.textValue()?:throw RuntimeJsonMappingException("Expected trait name")
                                  return traitTypeFromName(traitName)
@@ -238,7 +238,7 @@ fun <TFrame : WorldFrame> createWorldInitializerFromJson(source: URL, traitTypeF
 
     return { world -> object : WorldInitializer<TFrame> {
         override fun createCommandsForInitialState(): Array<WorldCommand<TFrame>> {
-            return entities.map { entity -> command { currentFrame: TFrame, nextFrame -> nextFrame.addEntity(entity.build()) } }.toTypedArray()
+            return entities.map { entity -> { _: TFrame, nextFrame: WorldFrameBuilder<TFrame> -> nextFrame.addEntity(entity.build()) } }.toTypedArray()
         }
     } }
 }

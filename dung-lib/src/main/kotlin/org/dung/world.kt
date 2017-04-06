@@ -12,9 +12,8 @@ open class WorldFrame(private val entities: Array<Entity>) {
     private val entitiesById = entities.associate { it.id to it }
     fun getEntityById(id: Int) = entitiesById[id]
     fun getAllEntities() = entities
-    fun <T> entitiesWithTraitValue(startingLocation: TraitType<T>, value: T) = entities.filter { entity -> entity[startingLocation] == value }
+    fun <T> entitiesWithTraitValue(startingLocation: TraitTypeT<T>, value: T) = entities.filter { entity -> entity[startingLocation] == value }
 }
-
 
 class WorldFrameBuilder<TFrame : WorldFrame>(baseFrame: TFrame, private val entityGen: EntityGenerator, private val createFrame: (Array<Entity>)->TFrame) {
     val entitiesById = HashMap(baseFrame.getAllEntities().map { entity -> entity.modify() }.associate { it.id to it })
@@ -42,29 +41,11 @@ interface TickableTrait<TFrame : WorldFrame> {
     fun update(frame: TFrame, entity: Entity, updateTimestamp: LocalDateTime): List<WorldCommand<TFrame>>
 }
 
-interface WorldCommand<TFrame : WorldFrame> {
-    fun run(currentFrame: TFrame, nextFrame: WorldFrameBuilder<TFrame>)
-}
+typealias WorldCommand<TFrame> = (currentFrame: TFrame, nextFrame: WorldFrameBuilder<TFrame>)->Unit
+typealias WorldEntityCommand<TFrame> = (entity: Entity, currentFrame: TFrame, nextFrame: WorldFrameBuilder<TFrame>)->Unit
 
-interface WorldEntityCommand<TFrame : WorldFrame> {
-    fun run(entity: Entity, frame: TFrame, nextFrame: WorldFrameBuilder<TFrame>)
-}
-
-fun <TFrame : WorldFrame> command(f: (currentFrame: TFrame, nextFrame: WorldFrameBuilder<TFrame>)->Unit): WorldCommand<TFrame> {
-    return object : WorldCommand<TFrame> {
-        override fun run(frame: TFrame, nextFrame: WorldFrameBuilder<TFrame>)= f(frame, nextFrame)
-    }
-}
-
-fun <TFrame : WorldFrame> updateEntityCommand(entityId: Int, updateFnc: EntityBuilder.()->EntityBuilder): WorldCommand<TFrame> {
-    return command({ frame, nextFrame -> nextFrame.updateEntity(entityId, updateFnc) })
-}
-
-fun <TFrame : WorldFrame> entityCommand(f: (entity: Entity, currentFrame: TFrame, nextFrame: WorldFrameBuilder<TFrame>)->Unit): WorldEntityCommand<TFrame> {
-    return object : WorldEntityCommand<TFrame> {
-        override fun run(entity: Entity, frame: TFrame, nextFrame: WorldFrameBuilder<TFrame>)= f(entity, frame, nextFrame)
-    }
-}
+fun <TFrame : WorldFrame> updateEntityCommand(entityId: Int, command: EntityBuilder.()->EntityBuilder): WorldCommand<TFrame> =
+        { _, nextFrame -> nextFrame.updateEntity(entityId, command) }
 
 interface EntityGenerator {
     fun newEntity():EntityBuilder
@@ -95,10 +76,10 @@ open class UpdatingWorld<TFrame : WorldFrame>(private val createFrame: (Array<En
         commandQueue.drainTo(commands)
 
         val frameTimestamp = LocalDateTime.now()
-        commands.addAll(currentFrame.getAllEntities().flatMap { e -> e.traits.values.filterIsInstance<TickableTrait<TFrame>>().flatMap { it.update(currentFrame, e, frameTimestamp) } })
+        commands.addAll(currentFrame.getAllEntities().flatMap { e -> e.traitsOf<TickableTrait<TFrame>>().flatMap { it.update(currentFrame, e, frameTimestamp) } })
 
         val currentFrameBuilder = WorldFrameBuilder<TFrame>(currentFrame, this, createFrame)
-        commands.forEach { command -> command.run(currentFrame, currentFrameBuilder) }
+        commands.forEach { command -> command(currentFrame, currentFrameBuilder) }
 
         currentFrame = currentFrameBuilder.build()
         newFrameSubject.onNext(lastFrame to currentFrame )

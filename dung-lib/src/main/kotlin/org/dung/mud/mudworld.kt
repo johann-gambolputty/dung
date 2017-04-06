@@ -11,23 +11,16 @@ class MudWorldFrame(entities: Array<Entity>) : WorldFrame(entities) {
 
 fun MudWorldFrame.entityWithNameAtLocation(name: String, locationId: Int): Entity? {
     val ucName = name.toUpperCase()
-    return getEntitiesInLocation(locationId).firstOrNull { ucName == it.get(nameTrait)?.toString(it)?.toUpperCase() }
+    return getEntitiesInLocation(locationId).firstOrNull { ucName == it.name().toUpperCase() || it.matchesUcAlias(ucName) }
 }
 
 
 //  TODO use type aliases when available
-interface MudWorldCommand : WorldCommand<MudWorldFrame>
-
-fun mudCommand(f: (currentFrame: MudWorldFrame, nextFrame: WorldFrameBuilder<MudWorldFrame>) -> Unit) =
-        object : MudWorldCommand {
-            override fun run(frame: MudWorldFrame, nextFrame: WorldFrameBuilder<MudWorldFrame>)= f(frame, nextFrame)
-        }
-
-fun mudEntityCommand(f: (entity: Entity, currentFrame: MudWorldFrame, nextFrame: WorldFrameBuilder<MudWorldFrame>) -> Unit) = entityCommand(f)
+typealias MudWorldCommand = WorldCommand<MudWorldFrame>
 
 fun EntityBuilder.defaultEntity(name: String, description: String) =
-        set(nameTrait, EntityFormatString(name))
-        .set(descriptionTrait, EntityFormatString(description))
+        set(nameTrait, name)
+        .set(descriptionTrait, description)
 
 fun EntityBuilder.defaultCreature(name: String, description: String, startingHealth: Int, startingInventory: Array<Entity> = arrayOf()): EntityBuilder {
     var eb = defaultEntity(name, description)
@@ -42,7 +35,8 @@ fun EntityBuilder.defaultCreature(name: String, description: String, startingHea
 
 open class MudWorldInitializer(val world: UpdatingMudWorld) : WorldInitializer<MudWorldFrame> {
 
-    override fun createCommandsForInitialState(): Array<WorldCommand<MudWorldFrame>> = entityMap.values.map { mudCommand({ currentFrame, nextFrame -> nextFrame.addEntity(it.build())}) }.toTypedArray()
+    override fun createCommandsForInitialState(): Array<WorldCommand<MudWorldFrame>> =
+            entityMap.values.map { entityBuilder -> { _: MudWorldFrame, nextFrame: WorldFrameBuilder<MudWorldFrame> -> nextFrame.addEntity(entityBuilder.build())} }.toTypedArray()
 
     private val entityMap = mutableMapOf<Int, EntityBuilder>()
 
