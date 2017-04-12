@@ -4,6 +4,17 @@ import org.dung.*
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 
+class AttackAffordanceTrait() : AffordanceTrait {
+    override fun matches(verb: String): Boolean = verb == "ATTACK"
+
+    override fun apply(currentFrame: MudWorldFrame, nextFrame: WorldFrameBuilder<MudWorldFrame>, source: Entity, verbObject: Entity) {
+        nextFrame.updateEntity(source.id, { setAttackFocus(verbObject.id) })
+        nextFrame.updateEntity(verbObject.id, { setAttackFocus(source.id) })
+    }
+
+}
+val affordanceAttackTrait = mudTraitTypes.newTrait("affordanceAttack", { AttackAffordanceTrait() }, { node -> null })
+
 data class AttackFocus(val targetEntityId: Int?, val lastAttackTimestamp: LocalDateTime) : TickableTrait<MudWorldFrame> {
     override fun update(frame: MudWorldFrame, entity: Entity, updateTimestamp: LocalDateTime): List<WorldCommand<MudWorldFrame>> {
         if (targetEntityId == null) {

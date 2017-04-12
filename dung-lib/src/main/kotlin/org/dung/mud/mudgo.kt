@@ -4,6 +4,14 @@ import java.io.InputStreamReader
 
 class SimpleMud : MudWorldBuilder() {
 
+    val templatePlayer = entityTemplate {
+        healthTrait eq 10
+        genderTrait eq genders.male
+        damageMonitorTrait()
+        affordanceInspectTrait()
+        affordanceAttackTrait()
+    }
+
     val templateActor = entityTemplate {
         healthTrait eq 10
         genderTrait eq genders.thing
@@ -19,6 +27,30 @@ class SimpleMud : MudWorldBuilder() {
     val templateLevel1Actor = entityTemplate {
         xpValueTrait eq 1
     }
+    val templateLevel10Actor = entityTemplate {
+        xpValueTrait eq 1000
+    }
+
+    val templateWeapon = entityTemplate { }
+    val templateArmour = entityTemplate { }
+    val templateShield = entityTemplate { }
+
+    val templatePlainSword = templateWeapon {
+    }
+    val templatePlateMailArmour = templateArmour {
+    }
+
+    val templateCastleBlackGuard = templateActor {
+        templateLevel10Actor()
+        genderTrait eq genders.male
+        skillTrait eq 100
+        critTrait eq 5
+        healthTrait eq 150
+        nameTrait eq "Guard"
+        aliasesTrait eq arrayOf("GUARD")
+        descriptionTrait eq "Castle Black guard"
+        inventoryTrait eq arrayOf(templatePlainSword, templateShield, templatePlateMailArmour)
+    }
 
     val templateCrystalSnake = templateCrystalActor {
         templateLevel1Actor()
@@ -28,7 +60,6 @@ class SimpleMud : MudWorldBuilder() {
         descriptionTrait eq "A small vicious looking snake whose body has been corrupted with shards of opaque white crystal"
         inventoryTrait eq Inventory(arrayOf())
     }
-
 
     val start: LocationId = location {
         descriptionTrait {
@@ -44,6 +75,8 @@ class SimpleMud : MudWorldBuilder() {
         }
         startingLocation eq true
         affordanceGoNorthTrait eq start_tunnel0
+        templateCastleBlackGuard { nameTrait eq "Bob" }
+        templateCastleBlackGuard { nameTrait eq "Alice"; genderTrait eq genders.female }
     }
     val start_tunnel0: LocationId = location {
         descriptionTrait eq

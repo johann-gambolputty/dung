@@ -56,7 +56,11 @@ class MudClientConsoleView(private val world: UpdatingMudWorld) : MudClientView 
                 line[0] in arrayOf("q", "quit", "exit") -> quit = true
                 else -> {
                     world.addCommand(cmd@ { currentFrame, nextFrame ->
-                        val player = currentFrame.getEntityById(playerId) ?: return@cmd
+                        val player = currentFrame.getEntityById(playerId)
+                        if (player == null) {
+                            show("You died")
+                            return@cmd
+                        }
                         val playerLocationId = player.get(locationTrait) ?: -1
                         val verb = line[0].toUpperCase()
 
@@ -74,14 +78,19 @@ class MudClientConsoleView(private val world: UpdatingMudWorld) : MudClientView 
                         }
 
                         val targetEntities = getTargetEntities(if (line.size > 1) line[1] else null)
-                        targetEntities
+                        val targetAffordanceTrait = targetEntities
                                 .map { entity ->
                                     val affordanceTrait = entity.traitsOf<AffordanceTrait>().firstOrNull { it.matches(verb) }
                                     if (affordanceTrait == null) null else entity to affordanceTrait
                                 }
                                 .filterNotNull()
                                 .firstOrNull()
-                                ?.apply { second.apply(currentFrame, nextFrame, player, first) }
+                        if (targetAffordanceTrait != null) {
+                            targetAffordanceTrait.second.apply(currentFrame, nextFrame, player, targetAffordanceTrait.first)
+                        }
+                        else {
+                            show("Can't do that")
+                        }
                     })
                 }
             }
@@ -89,13 +98,6 @@ class MudClientConsoleView(private val world: UpdatingMudWorld) : MudClientView 
     }
 }
 
-fun <T> compareTraits(entityInLastFrame: Entity?, entityInCurrentFrame: Entity, trait: TraitTypeT<T>, runIfDifferent: (previousValue: T?, currentValue: T?) -> Unit) {
-    val previousValue = entityInLastFrame?.get(trait)
-    val currentValue = entityInCurrentFrame.get(trait)
-    if (previousValue != currentValue) {
-        runIfDifferent(previousValue, currentValue)
-    }
-}
 
 class MudWorldView(val entityId: Int, world: UpdatingMudWorld, view: MudClientView) {
     init {
@@ -107,8 +109,17 @@ class MudWorldView(val entityId: Int, world: UpdatingMudWorld, view: MudClientVi
                 return@subscribe
             }
 
-            //  If the user has received experience, show that
-            compareTraits(entityInLastFrame, entityInCurrentFrame, currentXpTrait, { previousXp, currentXp -> view.show("Gained ${(currentXp?:0) - (previousXp?:0)} experience")})
+            fun <T> compareTraits(trait: TraitTypeT<T>, runIfDifferent: (previousValue: T?, currentValue: T?) -> Unit) {
+                val previousValue = entityInLastFrame?.get(trait)
+                val currentValue = entityInCurrentFrame.get(trait)
+                if (previousValue != currentValue) {
+                    runIfDifferent(previousValue, currentValue)
+                }
+            }
+
+            //  Check for changed traits
+            compareTraits(currentXpTrait, { previousXp, currentXp -> view.show("Gained ${(currentXp?:0) - (previousXp?:0)} experience")})
+            compareTraits(levelTrait, { _, currentLevel -> view.show("Congratulations! You are now level $currentLevel")})
 
             //  Compare locations
             val locationInLastFrame = if (entityInLastFrame == null) -1 else entityInLastFrame.get(locationTrait) ?: -1

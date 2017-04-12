@@ -9,18 +9,26 @@ val xpValueTrait = mudTraitTypes.newTrait<Int>("xpValue", { 1 }, no_json())
 val currentXpTrait = mudTraitTypes.newTrait<Int>("currentXp", { 0 }, no_json())
 val levelTrait = mudTraitTypes.newTrait<Int>("level", { 0 }, no_json())
 
+fun calcLevelXpCap(currentLevel: Int): Int {
+    if (currentLevel <= 1) {
+        return 5
+    }
+    val previousLvl = calcLevelXpCap(currentLevel - 1)
+    return previousLvl + (previousLvl * 1.1).toInt()
+}
+
 fun EntityBuilder.youKilledMe(deadEntity: Entity): EntityBuilder {
     val currentXp = get(currentXpTrait)
     if (currentXp != null) {
         deadEntity.get(xpValueTrait)?.let { xp ->
             val killer = this@youKilledMe
-            val currentLevel = killer.get(levelTrait)?:0
             val newXp = currentXp + xp
-            val levelXpCap = calcLevelXpCap(killer)
+            val currentLevel = killer.get(levelTrait)?:0
+            val levelXpCap = calcLevelXpCap(currentLevel)
             if (newXp > levelXpCap) {
-                return@youKilledMe killer.set(currentXpTrait, newXp - levelXpCap).set(levelTrait, )
+                return@youKilledMe killer.set(currentXpTrait, newXp).set(levelTrait, currentLevel + 1)
             }
-            return@youKilledMe this@youKilledMe.set(currentXpTrait, currentXp + this)
+            return@youKilledMe this@youKilledMe.set(currentXpTrait, newXp)
         }
     }
     return this

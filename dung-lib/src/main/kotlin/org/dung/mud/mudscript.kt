@@ -25,6 +25,13 @@ open class ObjectTemplate {
         traits[this] = TraitAndValue(this, { eb, _ -> eb.set(this, value.trimMargin())})
     }
 
+    infix fun TraitTypeT<Inventory>.eq(value: Array<EntityTemplate>): Unit {
+        traits[this] = TraitAndValue(this, { eb, context ->
+            val inventoryItems = value.flatMap { template -> template.toEntities(context, eb.id) }.toTypedArray()
+            eb.set(this, Inventory(inventoryItems))
+        })
+    }
+
     infix fun <T> TraitType1<T, Int>.eq(value: LocationId): Unit {
         traits[this] = TraitAndValue(this, { eb, context -> eb.set(this, create(context.locationEntityId(value)))})
     }
