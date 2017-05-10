@@ -40,6 +40,10 @@ class TraitTypeMaker() {
         add(trait)
         return trait
     }
+    fun <T : TraitType> newTrait(traitType: T): T {
+        add(traitType)
+        return traitType
+    }
     val traits : List<TraitType> get() = allTraitTypes
     fun findTraitType(traitName: String): TraitType = traitTypeByName[traitName]?:throw RuntimeException("Cannot find trait type named $traitName")
 }
@@ -52,6 +56,10 @@ interface TraitTypeT<T> : TraitType {
     fun fromJson(node: JsonNode, entityResolver: JsonEntityResolver):T?
 }
 
+class ProxyTraitType<TP, T>(val trait: TraitTypeT<T>, val map: (value: TP)->T)
+
+class ProxyApplyTraitType<T>(val apply: EntityBuilder.(value: T)->EntityBuilder)
+
 interface TraitType0<T> : TraitTypeT<T> {
     fun createDefault():T
 }
@@ -61,7 +69,7 @@ interface TraitType1<T, TP0> : TraitTypeT<T> {
     fun create(p: TP0):T
 }
 
-class TraitType0Impl<T>(override val traitName: String, private val createFn: ()->T, private val fromJsonFn: (JsonNode, JsonEntityResolver)->T?) : TraitType0<T> {
+open class TraitType0Impl<T>(override val traitName: String, private val createFn: ()->T, private val fromJsonFn: (JsonNode, JsonEntityResolver)->T?) : TraitType0<T> {
     override fun fromJson(node: JsonNode, entityResolver: JsonEntityResolver): T? = fromJsonFn(node, entityResolver)
     override fun createDefault(): T = createFn()
     override fun toString(): String = traitName

@@ -29,10 +29,10 @@ data class AttackFocus(val targetEntityId: Int?, val lastAttackTimestamp: LocalD
                 if (target == null) {
                     return clearAttackFocus()
                 }
-                if (get(locationTrait) != target.get(locationTrait)) {
+                if (get(location) != target.get(location)) {
                     return clearAttackFocus()
                 }
-                if (target.get(deadTrait)?:false) {
+                if (target.get(dead)?:false) {
                     return clearAttackFocus()
                 }
 
@@ -78,13 +78,13 @@ fun doesFixedDamage(damage: Int): DamageFun = { damage }
 fun doesDamageInRange(minDamage: Int, maxDamage: Int): DamageFun = { rnd.nextInt(maxDamage - minDamage) + minDamage }
 
 val damageTrait = mudTraitTypes.newTrait<DamageFun>("damage", { doesFixedDamage(1) }, no_json())
-val skillTrait = mudTraitTypes.newTrait<Int>("skill", { 0 }, no_json())
-val critTrait = mudTraitTypes.newTrait<Int>("crit", { 0 }, no_json())
+val skill = mudTraitTypes.newTrait<Int>("skill", { 0 }, no_json())
+val crit = mudTraitTypes.newTrait<Int>("crit", { 0 }, no_json())
 
 fun probabilityToHit(attacker: TraitBased, target: TraitBased): Double {
 
-    val attackerSkill = attacker.get(skillTrait, 0)
-    val targetSkill = target.get(skillTrait, 0)
+    val attackerSkill = attacker.get(skill, 0)
+    val targetSkill = target.get(skill, 0)
 
     val diff = (attackerSkill - targetSkill)
 
@@ -93,6 +93,6 @@ fun probabilityToHit(attacker: TraitBased, target: TraitBased): Double {
 
 fun probabilityToCrit(attacker: TraitBased, target: TraitBased): Double {
 
-    val critAbility = Math.max(attacker.get(critTrait, 0), 1)
+    val critAbility = Math.max(attacker.get(crit, 0), 1)
     return critAbility / 100.0
 }

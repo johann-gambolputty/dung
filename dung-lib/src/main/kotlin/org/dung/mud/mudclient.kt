@@ -14,7 +14,7 @@ class ClientSignalRenderer(private val clientView: MudClientView) : SignalProces
         when (signal) {
             is DeadSignal -> clientView.show("You are dead")
             is ChatSignal -> clientView.show("${signal.chattyEntity.name()}: ${signal.message}")
-            is WieldSignal -> clientView.show("${frame.getEntityById(signal.itemId)?.get(nameTrait)}")
+            is WieldSignal -> clientView.show("${frame.getEntityById(signal.itemId)?.get(name)}")
         }
         return signal
     }
@@ -33,16 +33,16 @@ class MudClientConsoleView(private val world: UpdatingMudWorld) : MudClientView 
         }
         val player = EntityBuilderImpl(playerId)
                 .defaultCreature("Dylan", "It's Dylan!", startingHealth = 10)
-                .set(locationTrait, startingLocations.first().id)
+                .set(location, startingLocations.first().id)
                 .setHumanPlayer()
-                .set(critTrait, 50)
-                .set(skillTrait, 10)
+                .set(crit, 50)
+                .set(skill, 10)
                 .set(currentXpTrait, 0)
                 .set(showSignalsOnClientTrait, ClientSignalRenderer(this))
                 .build()
         world.addCommand({ _, frameBuilder ->
             frameBuilder.addEntity(player)
-            show("Hello ${player.get(nameTrait)}")
+            show("Hello ${player.get(name)}")
         })
     }
     fun run() {
@@ -61,7 +61,7 @@ class MudClientConsoleView(private val world: UpdatingMudWorld) : MudClientView 
                             show("You died")
                             return@cmd
                         }
-                        val playerLocationId = player.get(locationTrait) ?: -1
+                        val playerLocationId = player.get(location) ?: -1
                         val verb = line[0].toUpperCase()
 
                         fun getTargetEntities(name: String?): List<Entity> {
@@ -122,23 +122,23 @@ class MudWorldView(val entityId: Int, world: UpdatingMudWorld, view: MudClientVi
             compareTraits(levelTrait, { _, currentLevel -> view.show("Congratulations! You are now level $currentLevel")})
 
             //  Compare locations
-            val locationInLastFrame = if (entityInLastFrame == null) -1 else entityInLastFrame.get(locationTrait) ?: -1
-            val locationInCurrentFrame = entityInCurrentFrame.get(locationTrait) ?: -1
+            val locationInLastFrame = if (entityInLastFrame == null) -1 else entityInLastFrame.get(location) ?: -1
+            val locationInCurrentFrame = entityInCurrentFrame.get(location) ?: -1
 
             //  Show any echos in the current location
             currentFrame.getEntitiesInLocation(locationInCurrentFrame)
-                    .map { entity -> entity.get(echoTrait) }
+                    .map { entity -> entity.get(echo) }
                     .filterNotNull()
                     .forEach { view.show(it)}
 
             //  If the current location has changed from the previous frame, show the descripton of the new location
             if (locationInLastFrame != locationInCurrentFrame) {
                 currentFrame.getEntityById(locationInCurrentFrame)?.let { location->
-                    view.show(location.description())
+                    view.show(location.description(currentFrame))
                     val entitiesInLocation = currentFrame.getEntitiesInLocation(locationInCurrentFrame)
                     if (!entitiesInLocation.isEmpty()) {
                         view.show("You can see:")
-                        entitiesInLocation.map { it.get(nameTrait) }
+                        entitiesInLocation.map { it.get(name) }
                                 .filterNotNull()
                                 .forEach { view.show(it) }
                     }

@@ -1,35 +1,37 @@
 package org.dung.mud
 
 import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.RuntimeJsonMappingException
-import com.fasterxml.jackson.databind.node.JsonNodeType
 import org.dung.*
 import java.time.Duration
 import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAmount
 import java.util.*
 
 /**
  * Traits for muds.
  */
-class EntityFormatString(val format: String) {
-    fun toString(e: Entity): String = e.processText(format)
-}
 val mudTraitTypes = TraitTypeMaker().add(commonTraitTypes.traits)
-val nameTrait = mudTraitTypes.newTrait("name", { "Unnamed" }, { node -> node.valueString()?:"Unnamed" })
-fun Entity.name(): String = get(nameTrait)?:"Unnamed"
-val descriptionTrait = mudTraitTypes.newTrait("description", { "Undescribed" }, { node -> node.valueString()?:"Undescribed" })
-fun Entity.description(): String = get(descriptionTrait)?:"Undescribed"
-val locationTrait = mudTraitTypes.newTrait("location", { 0 }, { node -> node.valueInt() })
-fun EntityBuilder.setOrClearLocation(location: Int?): EntityBuilder {
-    if (location == null) {
-        return  remove(locationTrait)
+val name = mudTraitTypes.newTrait("name", { "Unnamed" }, { node -> node.valueString()?:"Unnamed" })
+fun Entity.name(): String = get(name)?:"Unnamed"
+val description = mudTraitTypes.newTrait("description", { "Undescribed" }, { node -> node.valueString()?:"Undescribed" })
+fun Entity.description(currentFrame: MudWorldFrame): String {
+    val baseDescription = get(description)?:"Undescribed"
+    val additionalDescriptions = traitsOf<HasDescription>()
+            .sortedBy { it.decriptionOrder }
+            .joinToString("\n") { it.description(currentFrame, this) }
+    return baseDescription + (if (additionalDescriptions.isEmpty()) "" else "\n") + additionalDescriptions
+}
+val location = mudTraitTypes.newTrait("location", { 0 }, { node -> node.valueInt() })
+fun EntityBuilder.setOrClearLocation(locationId: Int?): EntityBuilder {
+    if (locationId == null) {
+        return  remove(location)
     }
-    return set(locationTrait, location)
+    return set(location, locationId)
 }
 
-val aliasesTrait = mudTraitTypes.newTrait<Array<String>>("aliases", { arrayOf() }, no_json())
-fun Entity.matchesUcAlias(name: String): Boolean = get(aliasesTrait)?.contains(name)?:false
+val aliases = mudTraitTypes.newTrait<Array<String>>("aliases", { arrayOf() }, no_json())
+fun Entity.matchesUcAlias(name: String): Boolean = get(aliases)?.contains(name)?:false
 
 val startingLocation = mudTraitTypes.newTrait("startingLocation", { true },  { node -> null })
 
@@ -47,7 +49,7 @@ data class EntityScheduler(val schedule: List<EntityScheduleEntry> = listOf()) :
                 newSchedule.addAll(entry.nextEntries())
                 if (commands.isEmpty()) {
                     commands.add({ _, nextFrame ->
-                        nextFrame.updateEntity(entity.id, { set(schedulerTrait, EntityScheduler(newSchedule) )})
+                        nextFrame.updateEntity(entity.id, { set(scheduler, EntityScheduler(newSchedule) )})
                     })
                 }
                 commands.add(({ frame, nextFrame ->entry.commandToRun(entity, frame, nextFrame)}))
@@ -58,71 +60,36 @@ data class EntityScheduler(val schedule: List<EntityScheduleEntry> = listOf()) :
     }
     fun addEntry(entry: EntityScheduleEntry) = copy(schedule = schedule + entry)
 }
-val schedulerTrait = mudTraitTypes.newTrait("scheduler", { EntityScheduler() }, { node -> null })// TODO
+val scheduler = mudTraitTypes.newTrait("scheduler", { EntityScheduler() }, { node -> null })// TODO
 
 fun EntityBuilder.addToSchedule(entry: EntityScheduleEntry): EntityBuilder {
-    return set(schedulerTrait, getOrCreate(schedulerTrait).addEntry(entry))
+    return set(scheduler, getOrCreate(scheduler).addEntry(entry))
 }
-fun EntityBuilder.addToSchedule(delay: TemporalAmount, command: WorldEntityCommand<MudWorldFrame>): EntityBuilder {
+fun EntityBuilder.addToSchedule(delay: Duration, command: WorldEntityCommand<MudWorldFrame>): EntityBuilder {
     return addToSchedule(EntityScheduleEntry(LocalDateTime.now().plus(delay), command, { arrayOf() }))
 }
 fun repeatingSheduleEntry(nextAt: ()-> LocalDateTime, command: WorldEntityCommand<MudWorldFrame>): EntityScheduleEntry {
     return EntityScheduleEntry(nextAt(), command, { arrayOf(repeatingSheduleEntry(nextAt, command)) })
 }
-fun EntityBuilder.repeatAtRandom(minDelay: TemporalAmount, maxDelay: TemporalAmount, command: WorldEntityCommand<MudWorldFrame>): EntityBuilder {
+fun EntityBuilder.repeatAtRandom(minDelay: Duration, maxDelay: Duration, command: WorldEntityCommand<MudWorldFrame>): EntityBuilder {
     return addToSchedule(repeatingSheduleEntry({ randomTimeFromNow(minDelay, maxDelay) }, command))
 }
 val rnd = Random(-1)
-fun randomTimeFromNow(minDelay: TemporalAmount, maxDelay: TemporalAmount): LocalDateTime {
-    return LocalDateTime.now() + minDelay // TODO
+fun randomTimeFromNow(minDelay: Duration, maxDelay: Duration): LocalDateTime {
+    val minDelayUnit = minDelay.toMillis()
+    val maxDelayUnit = maxDelay.toMillis()
+    val boundedDelayUnit = rnd.nextInt((maxDelayUnit - minDelayUnit).toInt()) + minDelayUnit
+    return LocalDateTime.now() + Duration.ofMillis(boundedDelayUnit)
 }
 
-val echoTrait = mudTraitTypes.newTrait("echo", { "echo message" }, { node -> node.valueString() })
-fun EntityBuilder.echoEvent(message: String, location: Int) = set(echoTrait, message)
-        .set(lifetimeTrait, Lifetime(1))
-        .set(locationTrait, location)
+val echo = mudTraitTypes.newTrait("echo", { "echo message" }, { node -> node.valueString() })
+fun EntityBuilder.echoEvent(message: String, location: Int) = set(echo, message)
+        .set(lifetime, Lifetime(1))
+        .set(org.dung.mud.location, location)
 
-val playerTrait = mudTraitTypes.newTrait("isHumanPlayer", { true }, { node -> node.valueBoolean() })
-fun EntityBuilder.setHumanPlayer() = set(playerTrait, true)
-fun Entity.isHumanPlayer() = get(playerTrait)?:false
-
-private val textTokenRegex = Regex("\\#\\{([^}]*)\\}")
-fun Entity.processText(message: String): String {
-    val firstToken:Any? = Any()
-    fun tokenToObj(context: Any?, token: String): Any? {
-        if (context == firstToken) {
-            return if (token == "entity") this else throw RuntimeException("Unknown starting token '$token' in '$message'")
-        }
-        if (context == null) {
-            return null
-        }
-        if (context is TraitBased) {
-            return context.getByName(token)
-        }
-        val result = context.javaClass.kotlin.members
-                .firstOrNull { it.name == token }
-                ?.call(context)
-        return result
-    }
-    var text = message
-    var passCount = 0
-    while (textTokenRegex.containsMatchIn(text)) {
-        if (passCount++ > 10) break
-        text = textTokenRegex.replace(text, fun(match: MatchResult):CharSequence {
-            var startChar = (match.groups.get(1)?.range?.start)?:0
-            val capitalize = (startChar < 3) || (startChar-3..0)
-                    .map { message[it] }
-                    .firstOrNull { ch -> !ch.isWhitespace() }=='.'
-            val replacementValue = match.groupValues.get(1)
-                    .split('.')
-                    .fold(firstToken, { r, t -> tokenToObj(r, t) })
-            val replacementText = if (replacementValue is EntityFormatString) replacementValue.toString(this) else replacementValue?.toString()?:"???"
-            return if (!capitalize) replacementText else replacementText.capitalize()
-        })
-    }
-    return text
-}
-
+val isHumanPlayer = mudTraitTypes.newTrait("isHumanPlayer", { true }, { node -> node.valueBoolean() })
+fun EntityBuilder.setHumanPlayer() = set(isHumanPlayer, true)
+fun Entity.isHumanPlayer() = get(isHumanPlayer)?:false
 
 data class Lifetime(val ticksLeftToLive: Int): TickableTrait<MudWorldFrame> {
     override fun update(frame: MudWorldFrame, entity: Entity, updateTimestamp: LocalDateTime): List<WorldCommand<MudWorldFrame>> {
@@ -131,12 +98,12 @@ data class Lifetime(val ticksLeftToLive: Int): TickableTrait<MudWorldFrame> {
                 nextFrame.removeEntity(entity.id)
             }
             else {
-                nextFrame.updateEntity(entity.id, { set(lifetimeTrait, Lifetime(ticksLeftToLive - 1)) })
+                nextFrame.updateEntity(entity.id, { set(lifetime, Lifetime(ticksLeftToLive - 1)) })
             }
         })
     }
 }
-val lifetimeTrait = mudTraitTypes.newTrait("lifetime", { Lifetime(1) }, { node -> node.valueInt()?.let { Lifetime(it) } })
+val lifetime = mudTraitTypes.newTrait("lifetime", { Lifetime(1) }, { node -> node.valueInt()?.let { Lifetime(it) } })
 
 
 enum class SignalHandlerPrecedence {
@@ -163,9 +130,9 @@ data class SignalQueue(val signals: Array<Signal>) : TickableTrait<MudWorldFrame
             val finalSignal = signalProcessors.fold(signal, { lastSignal, signalProcessor -> signalProcessor.process(frame, entity, lastSignal) })
             signalTransformers.flatMap { it.transform(entity, finalSignal)} + { _, nextFrame ->
                 nextFrame.updateEntity(entity.id, {
-                    val existingSignals = getOrCreate(signalQueueTrait)
+                    val existingSignals = getOrCreate(signalQueue)
                     val existingSignalsWithProcessedSignalsRemoved = existingSignals.signals.filter { it !in signals }.toTypedArray()
-                    set(signalQueueTrait, existingSignals.copy(signals = existingSignalsWithProcessedSignalsRemoved))
+                    set(signalQueue, existingSignals.copy(signals = existingSignalsWithProcessedSignalsRemoved))
                 })
             }
         }
@@ -173,8 +140,8 @@ data class SignalQueue(val signals: Array<Signal>) : TickableTrait<MudWorldFrame
 
     fun addSignal(signal: Signal) = copy(signals = signals + signal)
 }
-val signalQueueTrait = mudTraitTypes.newTrait("signals", { -> SignalQueue(arrayOf()) }, { node -> null }) // TODO
-fun EntityBuilder.sendSignal(signal: Signal) = set(signalQueueTrait, getOrCreate(signalQueueTrait).addSignal(signal))
+val signalQueue = mudTraitTypes.newTrait("signals", { -> SignalQueue(arrayOf()) }, { node -> null }) // TODO
+fun EntityBuilder.sendSignal(signal: Signal) = set(signalQueue, getOrCreate(signalQueue).addSignal(signal))
 fun sendSignal(toEntityId: Int, signal: Signal): WorldCommand<MudWorldFrame> {
     return { _, nextFrame -> nextFrame.updateEntity(toEntityId, { sendSignal(signal) })}
 }
@@ -183,70 +150,70 @@ class DeadSignal : Signal
 data class DamageSignal(val attackerEntity: Entity, val weaponEntity: Entity?, val criticalHit: Boolean, val damage: Int) : Signal
 data class ChatSignal(val chattyEntity: Entity, val message: String) : Signal
 
-val wieldTrait = mudTraitTypes.newTrait<Int?>("wield", { null }, { node -> node.valueInt() })
+val wield = mudTraitTypes.newTrait<Int?>("wield", { null }, { node -> node.valueInt() })
 data class WieldSignal(val itemId: Int) : Signal
 fun EntityBuilder.wield(itemId: Int): EntityBuilder {
-    return set(wieldTrait, itemId)
+    return set(wield, itemId)
             .sendSignal(WieldSignal(itemId))
 }
 fun EntityBuilder.unwield(): EntityBuilder {
-    return set<Int?>(wieldTrait, null)
+    return set<Int?>(wield, null)
 }
 fun TraitBased.wieldedWeapon(): Entity? {
-    val wieldedItemId = get(wieldTrait)
-    return if (wieldedItemId == null) null else get(inventoryTrait)?.get(wieldedItemId)
+    val wieldedItemId = get(wield)
+    return if (wieldedItemId == null) null else get(inventory)?.get(wieldedItemId)
 }
 
-val deadTrait = mudTraitTypes.newTrait("dead", { false }, { node -> node.valueBoolean() })
+val dead = mudTraitTypes.newTrait("dead", { false }, { node -> node.valueBoolean() })
 
 
 data class Inventory(val items: Array<Entity>) {
     fun get(id: Int) = items.firstOrNull { it.id == id }
     fun add(entity: Entity) = copy(items = items + entity)
 }
-val inventoryTrait = mudTraitTypes.newTrait("inventory", { -> Inventory(arrayOf()) }, { node, entityResolver -> Inventory(entityResolver.loadEntities(node["items"]).map { eb -> eb.build() }.toTypedArray())})
-fun EntityBuilder.addToInventory(entity: Entity) = set(inventoryTrait, getOrCreate(inventoryTrait).add(entity))
+val inventory = mudTraitTypes.newTrait("inventory", { -> Inventory(arrayOf()) }, { node, entityResolver -> Inventory(entityResolver.loadEntities(node["items"]).map { eb -> eb.build() }.toTypedArray())})
+fun EntityBuilder.addToInventory(entity: Entity) = set(inventory, getOrCreate(inventory).add(entity))
 fun EntityBuilder.pickUpToInventory(frameBuilder: WorldFrameBuilder<MudWorldFrame>, entityId: Int): EntityBuilder {
     val entityToPickUp = frameBuilder.entitiesById[entityId]
     if (entityToPickUp == null) {
         return this
     }
     frameBuilder.removeEntity(entityId)
-    entityToPickUp.remove(locationTrait)
-    frameBuilder.addEntity(frameBuilder.newEntity().echoEvent("${get(nameTrait)} picks up ${entityToPickUp.get(nameTrait)}", get(locationTrait)?:-1).build())
+    entityToPickUp.remove(location)
+    frameBuilder.addEntity(frameBuilder.newEntity().echoEvent("${get(name)} picks up ${entityToPickUp.get(name)}", get(location)?:-1).build())
     var eb = this
-    if (eb.get(wieldTrait) == null) {
+    if (eb.get(wield) == null) {
         eb = eb.wield(entityToPickUp.id)
     }
-    return eb.set(inventoryTrait, eb.getOrCreate(inventoryTrait).add(entityToPickUp.build()))
+    return eb.set(inventory, eb.getOrCreate(inventory).add(entityToPickUp.build()))
 }
 
 fun EntityBuilder.dropFromInventory(frameBuilder: WorldFrameBuilder<MudWorldFrame>, entityId: Int): EntityBuilder {
-    val inventory = get(inventoryTrait)
+    val inventory = get(inventory)
     if (inventory == null) {
         return this
     }
     val itemInInventory = inventory.get(entityId) ?: return this
-    val location = get(locationTrait)
+    val location = get(location)
     if (location != null) {
-        frameBuilder.addEntity(itemInInventory.modify().set(locationTrait, location).build())
+        frameBuilder.addEntity(itemInInventory.modify().set(org.dung.mud.location, location).build())
     }
     else {
         frameBuilder.addEntity(itemInInventory)
     }
-    return set(inventoryTrait, inventory.copy(items = inventory.items.filter { it.id != entityId }.toTypedArray()))
+    return set(org.dung.mud.inventory, inventory.copy(items = inventory.items.filter { it.id != entityId }.toTypedArray()))
 }
 
-val healthTrait = mudTraitTypes.newTrait("health", {0}, { node -> node.valueInt()?:0 })
+val health = mudTraitTypes.newTrait("health", {0}, { node -> node.valueInt()?:0 })
 fun EntityBuilder.updateHealth(delta: Int): EntityBuilder {
-    val health = get(healthTrait)
+    val health = get(health)
     if (health != null) {
-        return set(healthTrait, health + delta)
+        return set(org.dung.mud.health, health + delta)
     }
     return this
 }
 
-val damageMonitorTrait = mudTraitTypes.newTrait("damageMonitor", { DamageMonitor() }, { node -> null })
+val damageMonitor = mudTraitTypes.newTrait("damageMonitor", { DamageMonitor() }, { node -> null })
 
 class DamageMonitor() : SignalTransformer {
     override val precedence: SignalHandlerPrecedence = SignalHandlerPrecedence.Low
@@ -257,20 +224,20 @@ class DamageMonitor() : SignalTransformer {
         return listOf({ _, nextFrame ->
             nextFrame.updateEntity(entity.id, fun EntityBuilder.():EntityBuilder {
                 var eb = this
-                var health = eb.get(healthTrait)
+                var health = eb.get(health)
                 if (health != null) {
                     health -= signal.damage
-                    eb = eb.set(healthTrait, health)
+                    eb = eb.set(org.dung.mud.health, health)
                     if (health <= 0) {
-                        eb = eb.set(deadTrait, true)
+                        eb = eb.set(dead, true)
                                 .sendSignal(DeadSignal())
                                 .set(removeFromWorldTrait, true)
-                        nextFrame.addEntity(nextFrame.newEntity().echoEvent("${signal.attackerEntity.get(nameTrait)} killed ${get(nameTrait)}!", eb.get(locationTrait)?:-1).build())
+                        nextFrame.addEntity(nextFrame.newEntity().echoEvent("${signal.attackerEntity.get(name)} killed ${get(name)}!", eb.get(location)?:-1).build())
                         nextFrame.updateEntity(signal.attackerEntity.id, { youKilledMe(entity) })
                     }
                     else {
                         val hitDescription = if (signal.criticalHit) "critically hits" else "hits"
-                        nextFrame.addEntity(nextFrame.newEntity().echoEvent("${signal.attackerEntity.get(nameTrait)} $hitDescription ${get(nameTrait)} for ${signal.damage} damage", eb.get(locationTrait)?:-1).build())
+                        nextFrame.addEntity(nextFrame.newEntity().echoEvent("${signal.attackerEntity.get(name)} $hitDescription ${get(name)} for ${signal.damage} damage", eb.get(location)?:-1).build())
                     }
                 }
                 return eb
@@ -289,19 +256,22 @@ class Genders {
     val byName = listOf(male, female, thing).associateBy { gender -> gender.noun }
 }
 val genders = Genders()
-val genderTrait = mudTraitTypes.newTrait("gender", { genders.male }, { node -> genders.byName[node.valueString()?:throw RuntimeException("Expected value")] })
+val gender = mudTraitTypes.newTrait("gender", { genders.male }, { node -> genders.byName[node.valueString()?:throw RuntimeException("Expected value")] })
 
 interface AffordanceTrait {
     fun matches(verb: String): Boolean
     fun apply(currentFrame: MudWorldFrame, nextFrame: WorldFrameBuilder<MudWorldFrame>, source: Entity, verbObject: Entity)
 }
-val affordanceGetPicksUpTrait = mudTraitTypes.newTrait<AffordanceTrait>("affordanceGet", { object : AffordanceTrait {
+val affordanceGetPicksUp = mudTraitTypes.newTrait<AffordanceTrait>("affordanceGet", { object : AffordanceTrait {
         override fun matches(verb: String): Boolean = (verb == "GET") || (verb == "PICKUP")
         override fun apply(currentFrame: MudWorldFrame, nextFrame: WorldFrameBuilder<MudWorldFrame>, source: Entity, verbObject: Entity) {
     }
 }}, { node -> null })
 
-
+interface HasDescription {
+    val decriptionOrder: Int
+    fun description(currentFrame: MudWorldFrame, entity: Entity): String
+}
 
 class CommandAffordanceTrait(val openCommand: WorldEntityCommand<MudWorldFrame>, vararg val validVerbs: String) : AffordanceTrait {
     override fun matches(verb: String): Boolean = validVerbs.contains(verb)
@@ -310,43 +280,38 @@ class CommandAffordanceTrait(val openCommand: WorldEntityCommand<MudWorldFrame>,
         openCommand(verbObject, currentFrame, nextFrame)
     }
 }
-fun commandCreateExit(destination: String): WorldEntityCommand<MudWorldFrame> {
-    return { entity, currentFrame, nextFrame ->
-        val destinationName = entity.processText(destination)
-    }
-}
-fun commandDestroyAllExits(): WorldEntityCommand<MudWorldFrame> {
-    return { entity, currentFrame, nextFrame ->
-    }
-}
-
-val affordanceOpenableTrait = mudTraitTypes.newTrait("affordanceOpenable", { command:WorldEntityCommand<MudWorldFrame> ->
-    CommandAffordanceTrait(command, "OPEN")
-}, no_json())
-
-data class GoAffordanceTrait(val exitNames: Array<String>, val destinationId: Int) : AffordanceTrait {
-
+data class GoAffordanceTrait(val exitNames: Array<String>, val destinationId: Int) : AffordanceTrait, HasDescription {
+    override val decriptionOrder: Int = 2
     constructor(exitNames: Array<String>, node: JsonNode, entityResolver: JsonEntityResolver) : this(exitNames, entityResolver.entityId(node, "destination")) {
     }
 
+    override fun description(currentFrame: MudWorldFrame, entity: Entity): String = "You can exit ${exitNames[0]} (type ${exitNames.joinToString { "'$it'" }})"
+
     override fun apply(currentFrame: MudWorldFrame, nextFrame: WorldFrameBuilder<MudWorldFrame>, source: Entity, verbObject: Entity) {
-        nextFrame.updateEntity(source.id, { set(locationTrait, destinationId) })
+        nextFrame.updateEntity(source.id, { set(location, destinationId) })
     }
 
     override fun matches(verb: String): Boolean = verb.toLowerCase() in exitNames
 }
 
-val affordanceGoNorthTrait = mudTraitTypes.newTrait("affordanceGoNorth'", { locationId: Int -> GoAffordanceTrait(arrayOf("north", "n"), locationId) }, no_json())
-val affordanceGoSouthTrait = mudTraitTypes.newTrait("affordanceGoSouth'", { locationId: Int -> GoAffordanceTrait(arrayOf("south", "s"), locationId) }, no_json())
-val affordanceGoEastTrait = mudTraitTypes.newTrait("affordanceGoEast'",   { locationId: Int -> GoAffordanceTrait(arrayOf("east", "e"), locationId)}, no_json())
-val affordanceGoWestTrait = mudTraitTypes.newTrait("affordanceGoWest'",   { locationId: Int -> GoAffordanceTrait(arrayOf("west", "w"), locationId)}, no_json())
+val goNorth = mudTraitTypes.newTrait("goNorth'", { locationId: Int -> GoAffordanceTrait(arrayOf("north", "n"), locationId) }, no_json())
+val goSouth = mudTraitTypes.newTrait("goSouth'", { locationId: Int -> GoAffordanceTrait(arrayOf("south", "s"), locationId) }, no_json())
+val goEast = mudTraitTypes.newTrait("goEast'",   { locationId: Int -> GoAffordanceTrait(arrayOf("east", "e"), locationId)}, no_json())
+val goWest = mudTraitTypes.newTrait("goWest'",   { locationId: Int -> GoAffordanceTrait(arrayOf("west", "w"), locationId)}, no_json())
 
 class InspectAffordanceTrait() : AffordanceTrait {
     override fun apply(currentFrame: MudWorldFrame, nextFrame: WorldFrameBuilder<MudWorldFrame>, source: Entity, verbObject: Entity) {
-        nextFrame.updateEntity(source.id, { sendSignal(ChatSignal(verbObject, verbObject.description())) })
+        nextFrame.updateEntity(source.id, { sendSignal(ChatSignal(verbObject, verbObject.description(currentFrame))) })
     }
 
     override fun matches(verb: String): Boolean = verb == "INSPECT"
-
 }
-val affordanceInspectTrait = mudTraitTypes.newTrait("affordanceInspect", { InspectAffordanceTrait() }, { node -> null })
+val inspectable = mudTraitTypes.newTrait("inspectable", { InspectAffordanceTrait() }, { node -> null })
+
+data class CurrencyUnit(val amount: Int) {
+    operator fun plus(rhs: CurrencyUnit): CurrencyUnit = CurrencyUnit(amount + rhs.amount)
+}
+fun gold(amount:Int): CurrencyUnit = silver(10 * amount)
+fun silver(amount: Int): CurrencyUnit = copper(10 * amount)
+fun copper(amount: Int): CurrencyUnit = CurrencyUnit(amount)
+val worth = mudTraitTypes.newTrait("worth", { -> CurrencyUnit(0) }, no_json())

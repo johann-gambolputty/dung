@@ -6,7 +6,7 @@ import java.time.LocalDateTime
 class UpdatingMudWorld() : UpdatingWorld<MudWorldFrame>({ entities -> MudWorldFrame(entities) })
 
 class MudWorldFrame(entities: Array<Entity>) : WorldFrame(entities) {
-    fun getEntitiesInLocation(id: Int) = getAllEntities().filter { entity -> entity.get(locationTrait)==id }
+    fun getEntitiesInLocation(id: Int) = getAllEntities().filter { entity -> entity.get(location)==id }
 }
 
 fun MudWorldFrame.entityWithNameAtLocation(name: String, locationId: Int): Entity? {
@@ -19,16 +19,16 @@ fun MudWorldFrame.entityWithNameAtLocation(name: String, locationId: Int): Entit
 typealias MudWorldCommand = WorldCommand<MudWorldFrame>
 
 fun EntityBuilder.defaultEntity(name: String, description: String) =
-        set(nameTrait, name)
-        .set(descriptionTrait, description)
+        set(org.dung.mud.name, name)
+        .set(org.dung.mud.description, description)
 
 fun EntityBuilder.defaultCreature(name: String, description: String, startingHealth: Int, startingInventory: Array<Entity> = arrayOf()): EntityBuilder {
     var eb = defaultEntity(name, description)
-            .setDefault(damageMonitorTrait)
-            .set(healthTrait, startingHealth)
-            .set(inventoryTrait, Inventory(startingInventory))
+            .setDefault(damageMonitor)
+            .set(health, startingHealth)
+            .set(inventory, Inventory(startingInventory))
     if (!startingInventory.isEmpty()) {
-        eb = eb.set(wieldTrait, startingInventory[0].id)
+        eb = eb.set(wield, startingInventory[0].id)
     }
     return eb
 }

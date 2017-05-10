@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.databind.RuntimeJsonMappingException
 import com.fasterxml.jackson.databind.node.JsonNodeType
-import org.dung.mud.locationTrait
+import org.dung.mud.location
 import java.net.URL
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -117,7 +117,7 @@ fun <TFrame : WorldFrame> createWorldInitializerFromJson(source: URL, traitTypeF
                      }
                      else if (field.key == "entities") {
                          entityResolver.loadEntities(field.value).forEach { childEntity ->
-                             childEntity.set(locationTrait, entityBuilder.id)
+                             childEntity.set(location, entityBuilder.id)
                          }
                      }
                  }

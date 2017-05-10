@@ -10,34 +10,36 @@ class ScriptContext(val entityGenerator: EntityGenerator, val locationIdToEntity
 
 class TraitAndValue(val trait: TraitType, val add:(EntityBuilder, ScriptContext)->Unit)
 
-
 open class ObjectTemplate {
 
-    val traits = mutableMapOf<TraitType, TraitAndValue>()
+    val setup = mutableListOf<(EntityBuilder, ScriptContext)->Unit>()
 
-    infix fun <T> TraitTypeT<T>.eq(value: T): Unit {
-        traits[this] = TraitAndValue(this, { eb, _ ->
-            eb.set(this, value)
-        })
+    fun inherit(template: EntityTemplate) {
+        setup.addAll(template.setup)
     }
 
-    infix fun TraitTypeT<String>.eq(value: String): Unit {
-        traits[this] = TraitAndValue(this, { eb, _ -> eb.set(this, value.trimMargin())})
+    infix fun <T> ProxyApplyTraitType<T>.set(value: T): Unit {
+        setup.add({eb, _ -> this.apply(eb, value) })
     }
 
-    infix fun TraitTypeT<Inventory>.eq(value: Array<EntityTemplate>): Unit {
-        traits[this] = TraitAndValue(this, { eb, context ->
-            val inventoryItems = value.flatMap { template -> template.toEntities(context, eb.id) }.toTypedArray()
-            eb.set(this, Inventory(inventoryItems))
-        })
+    infix fun <TP, T> ProxyTraitType<TP, T>.set(value: TP): Unit {
+        this.trait.set(this.map(value))
     }
 
-    infix fun <T> TraitType1<T, Int>.eq(value: LocationId): Unit {
-        traits[this] = TraitAndValue(this, { eb, context -> eb.set(this, create(context.locationEntityId(value)))})
+    infix fun <T> TraitTypeT<T>.set(value: T): Unit {
+        setup.add({eb, _ -> eb.set(this, value)})
+    }
+
+    infix fun TraitTypeT<String>.set(value: String): Unit {
+        setup.add({eb, _ -> eb.set(this, value.trimMargin())})
+    }
+
+    infix fun <T> TraitType1<T, Int>.set(value: LocationId): Unit {
+        setup.add({eb, context -> eb.set(this, create(context.locationEntityId(value)))})
     }
 
     operator fun <T> TraitType0<T>.invoke(): Unit {
-        traits[this] = TraitAndValue(this, { eb, _ -> eb.set(this, createDefault())})
+        setup.add({ eb, _ -> eb.set(this, createDefault())})
     }
 
     operator inline fun <reified T :  Any> TraitType0<T>.invoke(noinline createValue:EntityBuilder.()->T): Unit {
@@ -45,13 +47,13 @@ open class ObjectTemplate {
             val result = createValue()
             if (result is String) result.toString().trimMargin() as T else result
         }
-        traits[this] = TraitAndValue(this, { eb, _ -> eb.set(this, createNiceValue(eb)) })
+        setup.add({ eb, _ -> eb.set(this, createNiceValue(eb)) })
     }
 
     fun toEntities(context: ScriptContext, locationEntityId: Int): List<Entity> {
         val builder = context.entityGenerator.newEntity()
-        builder.set(locationTrait, locationEntityId)
-        traits.values.forEach { traitAndValue -> traitAndValue.add(builder, context) }
+        builder.set(location, locationEntityId)
+        setup.forEach { it(builder, context) }
         return listOf(builder.build())
     }
 }
@@ -60,22 +62,14 @@ class LocationTemplate(val locationId: LocationId, private val build: LocationTe
 
     val entities = mutableListOf<EntityTemplate>()
 
-    operator fun LocationTemplate.unaryPlus(): Unit {
-        this@LocationTemplate.traits.putAll(this.traits)
-    }
-
     operator fun EntityTemplate.unaryPlus() : Unit {
-        entities.add(this)
-    }
-
-    operator fun EntityTemplate.invoke(): Unit {
         entities.add(this)
     }
 
     operator fun EntityTemplate.invoke(create: ObjectTemplate.()->Unit):Unit {
         val baseTemplate = this
         entities.add(EntityTemplate().apply {
-            baseTemplate()
+            inherit(baseTemplate)
             create()
         })
     }
@@ -85,16 +79,12 @@ class LocationTemplate(val locationId: LocationId, private val build: LocationTe
         build()
         val locationEntityId = context.locationEntityId(locationId)
         val builder = EntityBuilderImpl(locationEntityId, mutableMapOf())
-        traits.values.forEach { trait -> trait.add(builder, context) }
+        setup.forEach { it(builder, context) }
         return listOf(builder.build()) + entities.flatMap { entityTemplate -> entityTemplate.toEntities(context, locationEntityId) }
     }
 }
 
 class EntityTemplate : ObjectTemplate() {
-
-    operator fun EntityTemplate.invoke(): Unit {
-        this@EntityTemplate.traits.putAll(this.traits)
-    }
 }
 
 fun entityTemplate(buildTemplate: EntityTemplate.()->Unit): EntityTemplate =
@@ -104,9 +94,9 @@ open class MudWorldBuilder {
     private var currentLocationId: Int = 0
     val locationMap = mutableMapOf<LocationId, LocationTemplate>()
     protected operator fun EntityTemplate.invoke(build: EntityTemplate.()->Unit): EntityTemplate {
-        var baseTemplate = this
+        val baseTemplate = this
         return EntityTemplate().apply {
-            baseTemplate()
+            inherit(baseTemplate)
             build()
         }
     }

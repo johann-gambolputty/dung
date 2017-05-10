@@ -12,6 +12,11 @@ interface Entity : TraitBased {
     fun modify(): EntityBuilder
 }
 
+fun <T : WorldFrame> Entity.updateInNextFrame(fnc: EntityBuilder.(currentFrame: T, nextFrame: WorldFrameBuilder<T>)->EntityBuilder): WorldCommand<T> {
+    val entityId = id
+    return { currentFrame, nextFrame -> nextFrame.updateEntity(entityId, { this.fnc(currentFrame, nextFrame) })}
+}
+
 interface EntityBuilder : TraitBased {
     val id: Int
     fun putAll(traitValues: Map<TraitType, Any>): EntityBuilder
@@ -20,6 +25,9 @@ interface EntityBuilder : TraitBased {
     fun <T> remove(t: TraitTypeT<T>): EntityBuilder
     fun build(): Entity
     fun build(id: Int): Entity
+}
+fun <T> EntityBuilder.set(t: ProxyApplyTraitType<T>, value: T): EntityBuilder {
+    return t.apply(this, value)
 }
 fun <T> EntityBuilder.setDefault(t: TraitType0<T>) = set(t, t.createDefault())
 fun <T> EntityBuilder.getOrCreate(t: TraitType0<T>, create: ()->T = { t.createDefault() }): T {
